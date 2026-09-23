@@ -72,10 +72,19 @@ def _default_focus_notes(ticker: str, domain: str) -> str:
 
 async def plan_research_tasks(state: ResearchState) -> dict:
     tickers = state["final_candidates"]
+    profiles = state.get("company_profiles") or {}
+    identities = "; ".join(
+        f"{t} = {profiles[t]['company_name']}" + (f" ({profiles[t]['website']})" if profiles[t].get("website") else "")
+        for t in tickers
+        if t in profiles
+    )
     llm = get_sonnet().with_structured_output(ResearchTasksOutput)
     prompt = (
         f"Industry: {state['industry_query']}\n"
         f"Final candidates selected for deep-dive research: {tickers}\n"
+        f"Resolved company identities (authoritative, from market data): {identities or 'unavailable'}\n"
+        "Never guess or suggest a different company for a ticker, and never tell a "
+        "researcher to figure out what the ticker refers to.\n"
         f"Screener's reasoning for selecting them: {state.get('screener_justification')}\n\n"
         f"For EACH of these {len(tickers)} tickers, write one specific focus_notes "
         f"instruction (1-2 sentences) for each of these 4 research domains: "

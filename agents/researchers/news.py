@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from agents.researchers._shared import build_domain_agent, find_task, run_domain_research
+from agents.researchers._shared import ToolGuard, build_domain_agent, find_task, run_domain_research
 from app.graph.state import TickerResearchState
 from tools.mcp_client import get_mcp_tool
 
@@ -23,9 +23,13 @@ def _system_prompt() -> str:
 
 
 async def news_researcher(state: TickerResearchState) -> dict:
-    tools = [get_mcp_tool("get_company_news"), get_mcp_tool("fetch")]
+    ticker = state["ticker"]
+    guard = ToolGuard.for_ticker(ticker)
+    tools = guard.wrap_all([get_mcp_tool("get_company_news"), get_mcp_tool("fetch")])
     agent = build_domain_agent(tools, _system_prompt())
     task = find_task(state, "news")
     focus_notes = task["focus_notes"] if task else ""
-    finding = await run_domain_research(agent, state["ticker"], "news", focus_notes)
+    finding = await run_domain_research(
+        agent, ticker, "news", focus_notes, company_profile=state.get("company_profile"), guard=guard
+    )
     return {"findings": [finding]}

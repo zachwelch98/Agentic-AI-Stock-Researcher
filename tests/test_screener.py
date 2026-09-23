@@ -176,3 +176,53 @@ async def test_accept_user_ticker_bypasses_screening():
     assert result["final_candidates"] == ["JPM"]
     assert result["used_llm_fallback_tickers"] is False
     assert result["status"] == "researching"
+
+
+class _FakeMcpTool:
+    def __init__(self, payloads: dict[str, dict | Exception]):
+        self._payloads = payloads
+
+    async def ainvoke(self, args: dict):
+        payload = self._payloads[args["ticker"]]
+        if isinstance(payload, Exception):
+            raise payload
+        return payload
+
+
+async def test_resolve_identity_pins_ticker_to_company(monkeypatch):
+    from agents.screener import resolve_identity
+
+    fake = _FakeMcpTool({"TE": {"ticker": "TE", "company_name": "T1 Energy Inc", "website": "https://t1energy.com/", "market_cap": 1.28e9}})
+    monkeypatch.setattr("agents.screener.get_mcp_tool", lambda name: fake)
+    state = make_initial_state("", "job", user_supplied_ticker="TE")
+    state["final_candidates"] = ["TE"]
+
+    result = await resolve_identity(state)
+
+    assert result["company_profiles"]["TE"]["company_name"] == "T1 Energy Inc"
+    assert result["company_profiles"]["TE"]["website"] == "https://t1energy.com/"
+    assert "status" not in result
+
+
+async def test_resolve_identity_fails_on_unresolvable_ticker(monkeypatch):
+    from agents.screener import resolve_identity
+
+    fake = _FakeMcpTool({"ZZZZ": {"ticker": "ZZZZ", "company_name": None}})
+    monkeypatch.setattr("agents.screener.get_mcp_tool", lambda name: fake)
+    state = make_initial_state("", "job", user_supplied_ticker="ZZZZ")
+    state["final_candidates"] = ["ZZZZ"]
+
+    result = await resolve_identity(state)
+
+    assert result["status"] == "failed"
+    assert "ZZZZ" in result["error"]
+
+
+async def test_resolve_identity_fails_when_lookup_raises(monkeypatch):
+    from agents.screener import resolve_identity
+
+    monkeypatch.setattr("agents.screener.get_mcp_tool", lambda name: _FakeMcpTool({"TE": RuntimeError("boom")}))
+    state = make_initial_state("", "job", user_supplied_ticker="TE")
+    state["final_candidates"] = ["TE"]
+
+    assert (await resolve_identity(state))["status"] == "failed"
