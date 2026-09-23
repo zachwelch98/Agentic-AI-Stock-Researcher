@@ -120,9 +120,8 @@ function renderReport(report) {
     return;
   }
 
-  const note = report.data_provenance_note
-    ? `<div class="note">${escapeHtml(report.data_provenance_note)}</div>`
-    : "";
+  const selectedTicker = (report.candidates || [])[0];
+  const note = renderCandidatesDetails(report, selectedTicker);
 
   const summary = report.overall_recommendation
     ? `<div class="card"><strong>Overall recommendation</strong><p>${escapeHtml(report.overall_recommendation)}</p></div>`
@@ -153,6 +152,46 @@ function renderReport(report) {
     .join("");
 
   reportPanel.innerHTML = `${note}${summary}${tickers}`;
+}
+
+function renderCandidatesDetails(report, selectedTicker) {
+  const candidates = report.screened_candidates || [];
+
+  if (!candidates.length) {
+    return report.data_provenance_note
+      ? `<div class="note">${escapeHtml(report.data_provenance_note)}</div>`
+      : "";
+  }
+
+  const rows = candidates
+    .map((c, idx) => {
+      const isSelected = c.ticker === selectedTicker;
+      const scoreText = typeof c.composite_score === "number" ? c.composite_score.toFixed(1) : "—";
+      const marketCapText = typeof c.market_cap === "number" ? `$${(c.market_cap / 1e9).toFixed(1)}B` : "—";
+      return `
+        <div class="candidate-row${isSelected ? " selected" : ""}">
+          <span class="candidate-rank">${idx + 1}</span>
+          <span class="candidate-ticker">${escapeHtml(c.ticker)}</span>
+          <span class="candidate-name">${escapeHtml(c.company_name || "")}</span>
+          <span class="candidate-score">score ${scoreText}</span>
+          <span class="candidate-cap">${marketCapText}</span>
+          ${isSelected ? '<span class="candidate-tag">Selected</span>' : ""}
+        </div>
+      `;
+    })
+    .join("");
+
+  const noteText = report.data_provenance_note
+    ? `<p class="note-text">${escapeHtml(report.data_provenance_note)}</p>`
+    : "";
+
+  return `
+    <details class="note candidates-details">
+      <summary>Other candidate tickers considered (${candidates.length})</summary>
+      <div class="candidate-list">${rows}</div>
+      ${noteText}
+    </details>
+  `;
 }
 
 function escapeHtml(str) {

@@ -77,5 +77,6 @@ async def synthesizer(state: ResearchState) -> dict:
     }
     if state["used_llm_fallback_tickers"]:
         report["data_provenance_note"] = _FALLBACK_TICKERS_NOTE
+        report["screened_candidates"] = state["screened_candidates"]
 
     return {"final_report": report, "status": "done"}
