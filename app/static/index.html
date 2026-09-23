@@ -95,6 +95,42 @@
       color: var(--muted);
       font-size: 0.85rem;
     }
+    .candidates-details summary {
+      cursor: pointer;
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 0.85rem;
+    }
+    .candidates-details summary:hover { text-decoration: underline; }
+    .candidates-details .note-text {
+      margin: 0.8rem 0 0;
+      color: var(--muted);
+    }
+    .candidate-list { margin-top: 0.7rem; }
+    .candidate-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.35rem 0;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .candidate-row:first-child { border-top: none; }
+    .candidate-rank { width: 1.5rem; color: var(--muted); }
+    .candidate-ticker { font-weight: 600; color: var(--text); width: 4rem; }
+    .candidate-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .candidate-score, .candidate-cap { white-space: nowrap; }
+    .candidate-row.selected { color: var(--text); }
+    .candidate-tag {
+      background: var(--accent);
+      color: white;
+      border-radius: 999px;
+      padding: 0.1rem 0.55rem;
+      font-size: 0.7rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body>
