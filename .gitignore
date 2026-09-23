@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+data/*.json
+!data/.gitkeep
+eval/last_run_results.json
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.DS_Store
+uv.lock.tmp
+
+.claude/context-map.json
+.claude/context-map.md
+
+# Course grading/assignment doc — not project code
+Integration Agents and Orchestration Checkpoint .pdf

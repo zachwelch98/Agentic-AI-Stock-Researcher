@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agentic AI Stock Researcher</title>
+  <style>
+    :root {
+      --bg: #0b0d12;
+      --panel: #151822;
+      --border: #262b3a;
+      --text: #e6e8ef;
+      --muted: #8b91a7;
+      --accent: #5b8cff;
+      --good: #3ecf8e;
+      --bad: #ff6b6b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 2rem 1rem 4rem;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
+    p.sub { color: var(--muted); margin-top: 0; margin-bottom: 1.5rem; }
+    form {
+      display: flex;
+      gap: 0.5rem;
+      width: 100%;
+      max-width: 640px;
+    }
+    input[type="text"] {
+      flex: 1;
+      padding: 0.7rem 0.9rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      font-size: 1rem;
+    }
+    button {
+      padding: 0.7rem 1.2rem;
+      border-radius: 8px;
+      border: none;
+      background: var(--accent);
+      color: white;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    #status-panel, #report-panel {
+      width: 100%;
+      max-width: 640px;
+      margin-top: 1.5rem;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.2rem;
+    }
+    .stage-list { list-style: none; padding: 0; margin: 0.5rem 0 0; }
+    .stage-list li {
+      padding: 0.35rem 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .stage-list li.active { color: var(--accent); font-weight: 600; }
+    .stage-list li.done { color: var(--good); }
+    .job-id { font-size: 0.8rem; color: var(--muted); margin-top: 0.5rem; }
+    .error { color: var(--bad); }
+    .ticker-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.2rem;
+      margin-top: 0.75rem;
+    }
+    .ticker-card h3 { margin: 0 0 0.4rem; }
+    .ticker-card .findings { margin-top: 0.6rem; }
+    .ticker-card .finding { margin-bottom: 0.5rem; }
+    .ticker-card .finding .domain { color: var(--accent); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    ul.plain { margin: 0.3rem 0; padding-left: 1.2rem; }
+    .note {
+      margin-top: 1rem;
+      padding: 0.8rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #1c1f2b;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Agentic AI Stock Researcher</h1>
+  <p class="sub">Enter an industry to find the single most undervalued stock, or enter a specific ticker to research it directly — both get a 4-domain deep-dive.</p>
+
+  <form id="research-form">
+    <input type="text" id="industry-input" placeholder="Industry, e.g. Regional Banks" />
+    <input type="text" id="ticker-input" placeholder="or a ticker, e.g. JPM" />
+    <button type="submit" id="submit-btn">Research</button>
+  </form>
+
+  <div id="status-panel"></div>
+  <div id="report-panel"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

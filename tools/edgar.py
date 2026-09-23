@@ -1,0 +1,160 @@
+"""Direct HTTP client for SEC EDGAR: ticker -> CIK cache + submissions JSON.
+
+Called directly (not through Fetch MCP) since these are already structured
+JSON endpoints, not pages needing text extraction. SEC requires a descriptive
+`User-Agent` identifying the requester and enforces a strict rate limit
+(<= 10 req/s); both are respected here.
+"""
+
+import json
+import os
+import tempfile
+import time
+from pathlib import Path
+
+import httpx
+from aiolimiter import AsyncLimiter
+from langchain_core.tools import tool
+
+from app.config import get_settings
+
+TICKER_CIK_URL = "https://www.sec.gov/files/company_tickers.json"
+SUBMISSIONS_URL_TEMPLATE = "https://data.sec.gov/submissions/CIK{cik:0>10}.json"
+
+CIK_CACHE_PATH = Path("data/sec_ticker_cik_cache.json")
+CIK_CACHE_TTL_HOURS = 24.0
+
+_edgar_limiter = AsyncLimiter(9, 1)
+
+
+def _atomic_write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(payload, f)
+        os.replace(tmp_path, path)
+    except BaseException:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise
+
+
+def _read_cache(path: Path) -> dict | None:
+    if not path.exists():
+        return None
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _is_stale(cache: dict, ttl_hours: float) -> bool:
+    fetched_at = cache.get("fetched_at")
+    if fetched_at is None:
+        return True
+    return (time.time() - fetched_at) > ttl_hours * 3600
+
+
+def _edgar_headers() -> dict[str, str]:
+    return {"User-Agent": get_settings().sec_edgar_user_agent}
+
+
+async def _fetch_ticker_cik_map(client: httpx.AsyncClient) -> dict[str, str]:
+    async with _edgar_limiter:
+        resp = await client.get(TICKER_CIK_URL, headers=_edgar_headers(), timeout=30.0)
+    resp.raise_for_status()
+    raw = resp.json()
+    return {
+        str(entry["ticker"]).upper(): str(entry["cik_str"]).zfill(10)
+        for entry in raw.values()
+    }
+
+
+async def get_ticker_cik_map(
+    path: Path | None = None, ttl_hours: float = CIK_CACHE_TTL_HOURS
+) -> dict[str, str]:
+    """Ticker (upper-cased) -> zero-padded 10-digit CIK, refreshing the cache if stale."""
+    if path is None:
+        path = CIK_CACHE_PATH
+    cache = _read_cache(path)
+    if cache is not None and not _is_stale(cache, ttl_hours):
+        return cache["ticker_to_cik"]
+
+    async with httpx.AsyncClient() as client:
+        try:
+            mapping = await _fetch_ticker_cik_map(client)
+        except httpx.HTTPError:
+            if cache is not None:
+                return cache["ticker_to_cik"]
+            raise
+
+    _atomic_write_json(path, {"fetched_at": time.time(), "ticker_to_cik": mapping})
+    return mapping
+
+
+async def get_cik_for_ticker(ticker: str) -> str | None:
+    mapping = await get_ticker_cik_map()
+    return mapping.get(ticker.upper())
+
+
+async def get_submissions(cik: str, client: httpx.AsyncClient | None = None) -> dict:
+    """Fetch the SEC EDGAR submissions JSON for a given (10-digit, zero-padded) CIK."""
+    url = SUBMISSIONS_URL_TEMPLATE.format(cik=cik)
+    owns_client = client is None
+    client = client or httpx.AsyncClient()
+    try:
+        async with _edgar_limiter:
+            resp = await client.get(url, headers=_edgar_headers(), timeout=30.0)
+        resp.raise_for_status()
+        return resp.json()
+    finally:
+        if owns_client:
+            await client.aclose()
+
+
+async def get_submissions_for_ticker(ticker: str) -> dict | None:
+    cik = await get_cik_for_ticker(ticker)
+    if cik is None:
+        return None
+    return await get_submissions(cik)
+
+
+@tool
+async def get_sec_filings(ticker: str) -> dict:
+    """Fetch recent SEC EDGAR filings (10-K, 10-Q, 8-K, etc.) for a US-listed
+    ticker. Each filing includes a ready-to-use `document_url` that can be
+    passed to the fetch tool to read the actual filing text."""
+    cik = await get_cik_for_ticker(ticker)
+    if cik is None:
+        return {"error": f"No SEC EDGAR CIK found for ticker {ticker}"}
+
+    submissions = await get_submissions(cik)
+    recent = submissions.get("filings", {}).get("recent", {})
+    cik_no_leading_zeros = str(int(cik))
+
+    filings = []
+    for form, filing_date, accession_number, primary_document in zip(
+        recent.get("form", []),
+        recent.get("filingDate", []),
+        recent.get("accessionNumber", []),
+        recent.get("primaryDocument", []),
+    ):
+        accession_no_dashes = accession_number.replace("-", "")
+        filings.append(
+            {
+                "form": form,
+                "filing_date": filing_date,
+                "document_url": (
+                    f"https://www.sec.gov/Archives/edgar/data/"
+                    f"{cik_no_leading_zeros}/{accession_no_dashes}/{primary_document}"
+                ),
+            }
+        )
+
+    return {
+        "ticker": ticker,
+        "company_name": submissions.get("name"),
+        "recent_filings": filings[:15],
+    }

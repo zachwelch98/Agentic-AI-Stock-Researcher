@@ -1,0 +1,32 @@
+[
+  {
+    "id": "regional-banks",
+    "industry": "Regional Banks",
+    "note": "Baseline case: abundant clean data, should clear the deterministic screen easily and produce a full single-ticker report."
+  },
+  {
+    "id": "direct-ticker-jpm",
+    "ticker": "JPM",
+    "note": "Direct-ticker bypass case: a specific, well-known ticker should skip screening entirely and go straight to the 4-domain deep-dive."
+  },
+  {
+    "id": "semiconductor-equipment",
+    "industry": "Semiconductor Equipment",
+    "note": "Cyclical industry: tests whether the screen can surface cyclical-decline mispricing rather than just penalizing temporarily depressed earnings."
+  },
+  {
+    "id": "specialty-retail",
+    "industry": "Specialty Retail",
+    "note": "Tests avoiding 'value trap' picks (structurally declining retailers that screen cheap on backward-looking multiples)."
+  },
+  {
+    "id": "genomic-biotech-research",
+    "industry": "Genomic and Biotech Research",
+    "note": "Deliberately hostile case: many negative-earnings names and thin leadership data. Exercises the insufficient_candidates conditional-edge path."
+  },
+  {
+    "id": "reits",
+    "industry": "REITs",
+    "note": "Different valuation convention (yield/FFO over P/E): tests that the scoring formula (dividend-yield bonus, not filter) isn't overfit to the regional-banks case."
+  }
+]

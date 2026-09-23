@@ -1,0 +1,38 @@
+[project]
+name = "agentic-ai-stock-researcher"
+version = "0.1.0"
+description = "Agentic AI stock researcher: LangGraph planner/researcher/synthesizer over MCP-backed financial tools"
+authors = [
+    { name = "Zach Welch" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "langgraph>=0.2.60",
+    "langchain-anthropic>=0.3.0",
+    "langchain-core>=0.3.28",
+    "mcp>=1.1.0",
+    "langchain-mcp-adapters>=0.0.9",
+    "mcp-server-fetch>=2024.11.5",
+    "httpx>=0.27",
+    "ta>=0.11.0",
+    "aiolimiter>=1.1.0",
+    "langsmith>=0.1.147",
+    "pydantic>=2.9",
+    "python-dotenv>=1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "respx>=0.21",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
