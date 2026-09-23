@@ -38,4 +38,49 @@ def compute_technical_indicators(bars: list[dict]) -> dict:
         if prior_avg > 0:
             result["volume_trend_pct"] = float((recent_avg - prior_avg) / prior_avg * 100)
 
+    result["signals"] = _signals(result, df)
     return result
+
+
+def _signals(ind: dict, df: pd.DataFrame) -> dict:
+    """Plain-language readings of the indicators, computed in code so the LLM
+    quotes them instead of re-deriving (and occasionally misreading) them."""
+    signals: dict = {}
+    close = ind["latest_close"]
+
+    above = [name for name in ("sma_20", "sma_50") if name in ind and close > ind[name]]
+    below = [name for name in ("sma_20", "sma_50") if name in ind and close < ind[name]]
+    if above and not below:
+        signals["trend"] = f"uptrend: close is above {' and '.join(above)}"
+    elif below and not above:
+        signals["trend"] = f"downtrend: close is below {' and '.join(below)}"
+    elif above and below:
+        signals["trend"] = f"mixed: close is above {' and '.join(above)} but below {' and '.join(below)}"
+
+    if "rsi_14" in ind:
+        rsi = ind["rsi_14"]
+        signals["rsi_state"] = "overbought (>70)" if rsi > 70 else "oversold (<30)" if rsi < 30 else "neutral (30-70)"
+
+    if "macd_diff" in ind:
+        diff, macd = ind["macd_diff"], ind["macd"]
+        side = "MACD above signal line" if diff > 0 else "MACD below signal line"
+        zero = "above zero" if macd > 0 else "below zero"
+        if diff > 0 and macd < 0:
+            signals["macd_state"] = f"bullish crossover forming: {side}, but still {zero}"
+        elif diff < 0 and macd > 0:
+            signals["macd_state"] = f"bearish crossover forming: {side}, but still {zero}"
+        else:
+            signals["macd_state"] = f"{'bullish' if diff > 0 else 'bearish'}: {side}, {zero}"
+
+    if len(df) >= 20:
+        signals["support_20d"] = float(df["low"].iloc[-20:].min())
+        signals["resistance_20d"] = float(df["high"].iloc[-20:].max())
+    if len(df) >= 50:
+        signals["support_50d"] = float(df["low"].iloc[-50:].min())
+        signals["resistance_50d"] = float(df["high"].iloc[-50:].max())
+
+    if "volume_trend_pct" in ind:
+        signals["volume_trend"] = (
+            f"average volume of the last 10 sessions is {ind['volume_trend_pct']:+.1f}% vs. the prior 10 sessions"
+        )
+    return signals

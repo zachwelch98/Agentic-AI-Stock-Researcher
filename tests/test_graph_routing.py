@@ -54,6 +54,15 @@ async def _stub_accept_user_ticker(state):
     }
 
 
+async def _stub_resolve_identity(state):
+    return {
+        "company_profiles": {
+            t: {"ticker": t, "company_name": f"Stub {t} Inc", "website": None, "market_cap": None}
+            for t in state["final_candidates"]
+        }
+    }
+
+
 async def _stub_plan_research_tasks(state):
     tasks = [
         {"ticker": ticker, "domain": domain, "focus_notes": "stub"}
@@ -90,6 +99,7 @@ def _build_stub_graph():
             "deterministic_screen": _stub_deterministic_screen,
             "llm_judgment_screen": _stub_llm_judgment_screen,
             "accept_user_ticker": _stub_accept_user_ticker,
+            "resolve_identity": _stub_resolve_identity,
             "plan_research_tasks": _stub_plan_research_tasks,
             "synthesizer": _stub_synthesizer,
         },

@@ -18,17 +18,30 @@ containing, in order:
 
 ```
 LangGraph (root)
-├── plan_screening_task          (Sonnet, structured output)
+├── plan_screening_task          (Sonnet, structured output)       [industry path only]
 ├── deterministic_screen         (screen_industry MCP tool-call span)
 ├── llm_judgment_screen          (Sonnet, structured output)
+├── accept_user_ticker                                             [ticker path only]
+├── resolve_identity             (get_fundamentals tool call, no LLM — pins ticker -> company)
 ├── plan_research_tasks          (Sonnet, structured output)
-├── run_ticker_research × 3      (parallel — one per final candidate)
-│   └── each contains 4 sequential researcher spans:
-│       news_researcher → financials_researcher → leadership_researcher → technical_researcher
-│       each researcher span is itself a ReAct loop with its own tool-call children
-│       (get_company_news / fetch / get_fundamentals / get_sec_filings / get_technical_indicators)
+├── run_ticker_research × 1      (one per final candidate)
+│   └── 4 researcher spans, run in parallel (app/graph/build.py wires
+│       START -> each researcher -> END; none reads another's output):
+│       news / financials / leadership: ReAct loops (Haiku) whose tools are wrapped by
+│         ToolGuard (ticker lock, tool-call budget, blocked hosts, result truncation);
+│         tools: get_company_news / get_fundamentals / get_sec_filings / read_sec_filing / fetch
+│       technical_researcher: one get_technical_indicators call + one Haiku summary
+├── validate_findings            (deterministic: identity + citation checks, no LLM)
 └── synthesizer                  (Sonnet, structured output)
 ```
+
+Runs can end early with `status: failed` at `resolve_identity` (ticker doesn't resolve) or at
+`validate_findings` (fewer than 3 domains with usable data -> `outcome: insufficient_data`).
+
+Measured effect of the identity/validation/efficiency changes on the same `TE` ticker run
+(before -> after): 33 -> 18 LLM calls, 149.7K -> 76.2K input tokens (17.7K of it read from
+cache), 68s -> 49s, 9 failed tool calls -> 0 failures (14 cheap budget/duplicate refusals),
+and a report about T1 Energy only instead of a T1 Energy / TE Connectivity mix.
 
 Verified against a real run on 2026-09-23 (project `agentic-ai-stock-researcher`,
 industry "Regional Banks") via the LangSmith SDK — `client.list_runs(project_name=...,
@@ -62,3 +75,47 @@ the full breakdown. Headline numbers:
 This screenshot hasn't been captured yet as of this commit — the run used to verify the
 trace shape above failed partway through (insufficient Anthropic credit), so the
 screenshot should be taken from a fresh, fully-completed run once credit is restored.
+
+## Local logging (offline, no LangSmith needed)
+
+LangSmith is hosted, so nothing under `traces/` is a trace. As a complement, a passive
+callback handler (`app/local_trace.py`) can write every run to disk. It only *observes*
+events the graph already emits — no extra LLM or tool calls, no graph/prompt changes.
+
+Enable it by setting `LOCAL_TRACE_DIR=traces/runs` in `.env` (empty/unset = off). Options
+(see `.env.example`): `LOCAL_TRACE_DB`, `LOCAL_TRACE_MAX_BLOB_BYTES` (200000),
+`LOCAL_TRACE_KEEP_RUNS` (50; older runs are pruned along with their DB rows).
+
+Per run, `traces/runs/<utc-timestamp>_<job_id>/`:
+
+```
+events.jsonl          one JSON line per event: start / end / error for graph nodes ("chain"),
+                      LLM calls and tool calls, with ts, latency_ms, token usage, model, the
+                      owning node (`node`, `node_path`), previews, and blob references
+blobs/<sha256>.json   full inputs/outputs, content-addressed: identical content is stored
+                      once (a ReAct loop resends its whole conversation every turn, but each
+                      distinct message is one blob). Over-size payloads are truncated
+                      (`truncated: true`); configured API keys are redacted.
+summary.json          status, error, tags (git commit, model ids), totals, per-node totals
+```
+
+Events from parallel branches interleave; use `ts` and `parent_uuid` (LangChain run ids),
+not file order. LLM/tool events under a ReAct agent's internal `agent`/`tools` steps are
+attributed to the enclosing researcher node.
+
+**Not captured:** HTTP calls made *inside* the MCP finance-server subprocess (Finnhub,
+Yahoo, NASDAQ) — only the tool-call boundary is visible to the callback.
+
+### SQLite index
+
+At job end each run is upserted into `traces/traces.db` (`runs`, `events`, and a
+`node_totals` view). The run directories are the source of truth; the DB is derived and
+rebuildable, and holds hashes + previews, not payloads.
+
+```
+uv run python scripts/index_traces.py --rebuild --report   # rebuild from files + print summary tables
+sqlite3 traces/traces.db "SELECT node, SUM(input_tokens) FROM node_totals GROUP BY node"
+```
+
+Both `traces/runs/` and `traces/traces.db*` are gitignored. Traces can contain fetched
+article/filing text, so treat them as local data.

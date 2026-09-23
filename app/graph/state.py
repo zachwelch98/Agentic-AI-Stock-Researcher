@@ -22,12 +22,25 @@ class CandidateFundamentals(TypedDict):
     match_score: float | None
 
 
+class CompanyProfile(TypedDict):
+    ticker: str
+    company_name: str
+    website: str | None
+    market_cap: float | None
+
+
 class DomainFinding(TypedDict):
     ticker: str
     domain: str
     summary: str
     citations: list[dict]
     raw_data: dict
+    # Written by run_domain_research / validate_findings. Optional in practice:
+    # stub researchers in tests omit them, so readers use `.get(..., default)`.
+    identified_company: str
+    identity_ok: bool
+    fetched_urls: list[str]
+    validation_issues: list[str]
 
 
 class ResearchState(TypedDict):
@@ -41,12 +54,17 @@ class ResearchState(TypedDict):
     screener_justification: str | None
     research_tasks: list[ResearchTask]
     domain_findings: Annotated[list[DomainFinding], operator.add]
+    company_profiles: dict[str, CompanyProfile]
+    data_quality_warnings: list[str]
+    # "TICKER:domain" entries dropped by agents/validation.py (identity mismatch etc.).
+    excluded_domains: list[str]
     final_report: dict | None
     status: Literal[
         "planning",
         "screening",
         "insufficient_candidates",
         "researching",
+        "validating",
         "synthesizing",
         "done",
         "failed",
@@ -56,6 +74,7 @@ class ResearchState(TypedDict):
 
 class TickerResearchState(TypedDict):
     ticker: str
+    company_profile: CompanyProfile | None
     research_tasks: list[ResearchTask]
     findings: Annotated[list[DomainFinding], operator.add]
 
@@ -74,6 +93,9 @@ def make_initial_state(
         screener_justification=None,
         research_tasks=[],
         domain_findings=[],
+        company_profiles={},
+        data_quality_warnings=[],
+        excluded_domains=[],
         final_report=None,
         status="planning",
         error=None,

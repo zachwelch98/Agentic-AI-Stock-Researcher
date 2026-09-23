@@ -17,7 +17,7 @@ from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
-from app.graph.state import CandidateFundamentals, ResearchState
+from app.graph.state import CandidateFundamentals, CompanyProfile, ResearchState
 from app.llm import get_sonnet
 from tools.mcp_client import get_mcp_tool, parse_mcp_tool_result
 
@@ -166,3 +166,29 @@ async def insufficient_candidates(state: ResearchState) -> dict:
             "screened_candidates": state["screened_candidates"],
         },
     }
+
+
+async def resolve_identity(state: ResearchState) -> dict:
+    """Pin each final candidate to a company *before* any LLM sees the ticker.
+
+    Deterministic (one `get_fundamentals` call per ticker, no LLM): the resulting
+    `company_profiles` are the ground truth the planner and all 4 researchers are
+    given, so an ambiguous symbol like "TE" (T1 Energy, not TE Connectivity/TEL)
+    can't be silently swapped for a better-known company mid-run."""
+    tool = get_mcp_tool("get_fundamentals")
+    profiles: dict[str, CompanyProfile] = {}
+    for ticker in state["final_candidates"]:
+        try:
+            result = parse_mcp_tool_result(await tool.ainvoke({"ticker": ticker}))
+        except Exception as exc:
+            return {"status": "failed", "error": f"Could not resolve ticker {ticker}: {exc}"}
+        company_name = (result.get("company_name") or "").strip()
+        if not company_name:
+            return {"status": "failed", "error": f"Could not resolve ticker {ticker} to a company"}
+        profiles[ticker] = CompanyProfile(
+            ticker=ticker,
+            company_name=company_name,
+            website=result.get("website"),
+            market_cap=result.get("market_cap"),
+        )
+    return {"company_profiles": profiles}

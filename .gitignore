@@ -5,6 +5,8 @@ __pycache__/
 data/*.json
 !data/.gitkeep
 eval/last_run_results.json
+traces/runs/
+traces/traces.db*
 .pytest_cache/
 .ruff_cache/
 *.egg-info/

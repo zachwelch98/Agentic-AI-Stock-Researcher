@@ -13,9 +13,17 @@ from agents.screener import (
     deterministic_screen,
     insufficient_candidates,
     llm_judgment_screen,
+    resolve_identity,
 )
 from agents.synthesizer import synthesizer
-from app.graph.routing import fan_out_to_ticker_research, route_after_screen, route_from_start
+from agents.validation import validate_findings
+from app.graph.routing import (
+    fan_out_to_ticker_research,
+    route_after_resolve,
+    route_after_screen,
+    route_after_validate,
+    route_from_start,
+)
 from app.graph.state import ResearchState, TickerResearchState
 
 
@@ -74,8 +82,10 @@ def build_research_graph(
         "llm_judgment_screen": llm_judgment_screen,
         "accept_user_ticker": accept_user_ticker,
         "insufficient_candidates": insufficient_candidates,
+        "resolve_identity": resolve_identity,
         "plan_research_tasks": plan_research_tasks,
         "run_ticker_research": run_ticker_research,
+        "validate_findings": validate_findings,
         "synthesizer": synthesizer,
     }
     if node_overrides:
@@ -99,10 +109,20 @@ def build_research_graph(
             "llm_judgment_screen": "llm_judgment_screen",
         },
     )
-    graph.add_edge("llm_judgment_screen", "plan_research_tasks")
-    graph.add_edge("accept_user_ticker", "plan_research_tasks")
+    graph.add_edge("llm_judgment_screen", "resolve_identity")
+    graph.add_edge("accept_user_ticker", "resolve_identity")
+    graph.add_conditional_edges(
+        "resolve_identity",
+        route_after_resolve,
+        {"plan_research_tasks": "plan_research_tasks", END: END},
+    )
     graph.add_conditional_edges("plan_research_tasks", fan_out_to_ticker_research, ["run_ticker_research"])
-    graph.add_edge("run_ticker_research", "synthesizer")
+    graph.add_edge("run_ticker_research", "validate_findings")
+    graph.add_conditional_edges(
+        "validate_findings",
+        route_after_validate,
+        {"synthesizer": "synthesizer", END: END},
+    )
     graph.add_edge("synthesizer", END)
     graph.add_edge("insufficient_candidates", END)
 

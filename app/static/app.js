@@ -70,7 +70,10 @@ async function pollJob(jobId) {
       stopPolling();
       submitBtn.disabled = false;
       if (job.status === "done" && job.result) renderReport(job.result);
-      if (job.status === "failed") renderError(job.error || "Job failed");
+      if (job.status === "failed") {
+        renderError(job.error || "Job failed");
+        if (job.result) renderReport(job.result);
+      }
     }
   } catch (err) {
     renderError(String(err));
@@ -114,7 +117,19 @@ function renderError(message) {
   statusPanel.innerHTML = `<div class="card error">${escapeHtml(message)}</div>`;
 }
 
+function renderWarnings(report) {
+  const warnings = report.data_quality_warnings || [];
+  if (!warnings.length) return "";
+  return `<div class="note"><strong>Data-quality warnings</strong><ul class="plain">${warnings
+    .map((w) => `<li>${escapeHtml(w)}</li>`)
+    .join("")}</ul></div>`;
+}
+
 function renderReport(report) {
+  if (report.outcome === "insufficient_data") {
+    reportPanel.innerHTML = `<div class="card">${escapeHtml(report.message || "Not enough usable research data.")}</div>${renderWarnings(report)}`;
+    return;
+  }
   if (report.outcome === "insufficient_candidates") {
     reportPanel.innerHTML = `<div class="card">${escapeHtml(report.message || "Insufficient candidates found.")}</div>`;
     return;
@@ -151,7 +166,7 @@ function renderReport(report) {
     })
     .join("");
 
-  reportPanel.innerHTML = `${note}${summary}${tickers}`;
+  reportPanel.innerHTML = `${note}${renderWarnings(report)}${summary}${tickers}`;
 }
 
 function renderCandidatesDetails(report, selectedTicker) {
