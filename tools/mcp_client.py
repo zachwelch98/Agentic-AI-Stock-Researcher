@@ -12,6 +12,7 @@ singleton; graph node functions pull them from there via `get_mcp_tool()`.
 """
 
 import json
+import re
 import sys
 from contextlib import AsyncExitStack
 
@@ -79,10 +80,21 @@ def parse_mcp_tool_result(result: object) -> dict:
     if isinstance(result, dict):
         return result
     if isinstance(result, str):
-        return json.loads(result)
-    if isinstance(result, list):
+        text = result
+    elif isinstance(result, list):
         text = "".join(
             block.get("text", "") for block in result if isinstance(block, dict) and block.get("type") == "text"
         )
+    else:
+        raise TypeError(f"Unexpected MCP tool result type: {type(result)!r}")
+    try:
         return json.loads(text)
-    raise TypeError(f"Unexpected MCP tool result type: {type(result)!r}")
+    except json.JSONDecodeError:
+        # A tool that raised (isError=True) comes back as plain error text, not JSON.
+        # Surface that text instead of "Expecting value: line 1 column 1"; redact
+        # API keys, since httpx errors embed the request URL (Finnhub's ?token=...).
+        raise RuntimeError(f"MCP tool error: {_redact_secrets(text)[:500]}") from None
+
+
+def _redact_secrets(text: str) -> str:
+    return re.sub(r"((?:token|apikey|api_key)=)[^&\s'\"]+", r"\1<redacted>", text, flags=re.IGNORECASE)

@@ -104,6 +104,15 @@ async def deterministic_screen(state: ResearchState) -> dict:
     raw_result = await tool.ainvoke({"industry": state["industry_query"], "candidate_tickers": candidate_tickers})
     result = parse_mcp_tool_result(raw_result)
 
+    fetch_errors = result.get("fetch_errors") or []
+    if fetch_errors and len(result["candidates"]) < 3:
+        # Too few survivors *because* the data source failed: that's an outage, not a
+        # thin industry, so fail the job loudly instead of reporting insufficient_candidates.
+        raise RuntimeError(
+            f"Market data unavailable: {len(fetch_errors)} Finnhub fetch(es) failed "
+            f"({', '.join(fetch_errors[:5])}{', ...' if len(fetch_errors) > 5 else ''})"
+        )
+
     return {"screened_candidates": result["candidates"], "status": "screening"}
 
 
@@ -146,7 +155,9 @@ async def accept_user_ticker(state: ResearchState) -> dict:
     """Entry point for a user-supplied ticker: skips the industry screen entirely
     and hands the ticker straight to `plan_research_tasks`."""
     return {
-        "final_candidates": [state["user_supplied_ticker"]],
+        # Normalize: ToolGuard, the planner and validation all compare against upper-case
+        # tickers, so a raw "jpm" made every finding citing "JPM" look like another company.
+        "final_candidates": [state["user_supplied_ticker"].strip().upper()],
         "used_llm_fallback_tickers": False,
         "screener_justification": "User-specified ticker; industry screening bypassed.",
         "status": "researching",

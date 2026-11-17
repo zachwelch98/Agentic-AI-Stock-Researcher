@@ -26,6 +26,9 @@ class ScreenIndustryResult(BaseModel):
     candidates: list[ScreenedCandidate] = Field(default_factory=list)
     matched_industry_label: str | None = None
     match_score: float | None = None
+    # "TICKER: error" for candidates whose Finnhub fetch failed (401, 429, timeout...),
+    # so callers can tell a data-source outage from a genuinely thin industry.
+    fetch_errors: list[str] = Field(default_factory=list)
 
 
 class FundamentalsResult(BaseModel):

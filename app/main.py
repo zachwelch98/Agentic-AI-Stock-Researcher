@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router
+from app.config import get_settings
 from app.graph.build import build_research_graph
 from tools.mcp_client import build_mcp_client, open_persistent_mcp_sessions, set_mcp_tools
 from tools.mcp_finance_server import nasdaq_universe
@@ -21,8 +22,22 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def _require_api_keys() -> None:
+    """Fail at startup, not mid-run: without these every job dies after already
+    spending LLM calls (a missing Finnhub key surfaced as 401s deep in the screen)."""
+    settings = get_settings()
+    missing = [
+        name
+        for name, value in (("ANTHROPIC_API_KEY", settings.anthropic_api_key), ("FINNHUB_API_KEY", settings.finnhub_api_key))
+        if not value.strip()
+    ]
+    if missing:
+        raise RuntimeError(f"Missing required env var(s): {', '.join(missing)} (set them in .env)")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _require_api_keys()
     logger.info("Priming NASDAQ universe cache...")
     await nasdaq_universe.get_universe()
 
