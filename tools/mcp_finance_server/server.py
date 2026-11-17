@@ -102,6 +102,7 @@ async def screen_industry(industry: str, candidate_tickers: list[str]) -> dict:
     valid_symbols = nasdaq_universe.known_symbols(universe)
 
     raw_candidates: list[dict] = []
+    fetch_errors: list[str] = []
     async with httpx.AsyncClient() as client:
         for raw_symbol in candidate_tickers:
             symbol = raw_symbol.strip().upper()
@@ -109,14 +110,18 @@ async def screen_industry(industry: str, candidate_tickers: list[str]) -> dict:
                 continue
             try:
                 raw = await _fetch_candidate_raw(client, symbol, industry, None)
-            except httpx.HTTPError:
+            except httpx.HTTPStatusError as exc:
+                fetch_errors.append(f"{symbol}: HTTP {exc.response.status_code}")
+                continue
+            except httpx.HTTPError as exc:
+                fetch_errors.append(f"{symbol}: {type(exc).__name__}")
                 continue
             if raw is not None:
                 raw_candidates.append(raw)
 
     scored = screen_candidates(raw_candidates)
     return ScreenIndustryResult(
-        candidates=scored, matched_industry_label=industry, match_score=None
+        candidates=scored, matched_industry_label=industry, match_score=None, fetch_errors=fetch_errors
     ).model_dump()
 
 
